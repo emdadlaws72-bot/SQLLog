@@ -300,7 +300,11 @@ app.post('/api/stop', (req, res) => {
     let recordCount = 0;
     try {
       recordCount = sqlData.length;
-      fileName = saveToFile();
+      if (recordCount > 0) {
+        fileName = saveToFile();
+      } else {
+        fileName = null;
+      }
     } catch (saveErr) {
       console.error('保存文件失败:', saveErr);
       return res.json({
@@ -314,7 +318,7 @@ app.post('/api/stop', (req, res) => {
     res.json({
       success: true,
       message: '监控已停止',
-      fileName: fileName || null,
+      fileName: fileName,
       recordCount: recordCount
     });
   } catch (err) {
@@ -378,18 +382,44 @@ app.get('/api/logs/:filename', (req, res) => {
   }
 });
 
-app.post('/api/queryInboundSql', (req, res) => {
+app.post('/api/queryFullLinkSql', (req, res) => {
   try {
     const { orderNo } = req.body;
-    console.log('收到入库单号查询请求:', orderNo);
+    console.log('收到全链路单号查询请求:', orderNo);
+
+    if (!orderNo || !orderNo.trim()) {
+      return res.json({
+        success: false,
+        message: '请输入有效的单号'
+      });
+    }
+
+    const keyword = orderNo.trim().toLowerCase();
+
+    const filteredData = sqlData.filter(item => {
+      return item.sql.toLowerCase().includes(keyword);
+    });
+
+    if (filteredData.length === 0) {
+      console.log(`未找到包含单号 "${orderNo}" 的SQL记录`);
+      return res.json({
+        success: true,
+        message: `未找到包含单号 "${orderNo}" 的SQL记录`,
+        count: 0,
+        data: []
+      });
+    }
+
+    console.log(`找到 ${filteredData.length} 条包含单号 "${orderNo}" 的SQL记录`);
 
     res.json({
-      success: false,
-      message: '接口已预留，功能未实现',
-      orderNo: orderNo
+      success: true,
+      message: `找到 ${filteredData.length} 条关联SQL记录`,
+      count: filteredData.length,
+      data: filteredData
     });
   } catch (err) {
-    console.error('查询入库单SQL失败:', err);
+    console.error('查询全链路SQL失败:', err);
     res.json({
       success: false,
       message: err.message
