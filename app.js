@@ -302,6 +302,10 @@ app.post('/api/stop', (req, res) => {
 });
 
 app.get('/api/logs', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   try {
     if (!fs.existsSync(savePath)) {
       return res.json({ success: true, files: [] });

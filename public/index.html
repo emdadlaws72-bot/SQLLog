@@ -478,6 +478,7 @@
             padding: 24px;
             max-height: calc(90vh - 80px);
             overflow-y: auto;
+            overflow-x: hidden;
         }
 
         .sql-formatted {
@@ -988,7 +989,6 @@
                         📦 库存管理
                     </button>
                 </div>
-                </div>
                 <div id="modalRecords"></div>
             </div>
         </div>
@@ -1006,6 +1006,7 @@
         let currentLogRecords = [];
         let currentBusinessFilter = 'ALL';
         let modalBusinessFilter = 'ALL';
+        let logFileRefreshInterval = null;
 
         const businessTables = {
             inbound: [
@@ -1424,6 +1425,10 @@
                     statusEl.innerHTML = '▶️ 监控中';
                     statusEl.className = 'status monitoring';
                     startStream();
+
+                    logFileRefreshInterval = setInterval(() => {
+                        loadLogFiles();
+                    }, 5000);
                 } else {
                     alert('启动失败: ' + data.message);
                 }
@@ -1449,6 +1454,10 @@
                     if (eventSource) {
                         eventSource.close();
                         eventSource = null;
+                    }
+                    if (logFileRefreshInterval) {
+                        clearInterval(logFileRefreshInterval);
+                        logFileRefreshInterval = null;
                     }
                     const msg = data.fileName
                         ? `监控已停止，已保存 ${data.recordCount} 条记录到文件: ${data.fileName}`
@@ -1548,7 +1557,14 @@
 
         async function loadLogFiles() {
             try {
-                const res = await fetch('/api/logs');
+                const res = await fetch('/api/logs', {
+                    cache: 'no-store',
+                    headers: {
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
+                    }
+                });
                 const data = await res.json();
                 if (data.success) {
                     logFiles = data.files;
