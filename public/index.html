@@ -744,7 +744,8 @@
     <div class="container">
         <div class="header">
             <div>
-                <h1>📊 SQL 实时监控系统</h1>
+                <h1>🎯 MySQL 实时SQL监控小工具</h1>
+                <p style="font-size: 14px; color: #666; margin-top: 5px;">仓储现场开发/测试/定位问题专用 | V2.0</p>
                 <div class="status" id="status">未连接</div>
             </div>
             <div class="stat-item" style="margin: 0;">
@@ -754,7 +755,7 @@
         </div>
 
         <div class="card">
-            <div class="section-title">🔌 数据库连接</div>
+            <div class="section-title">🔌 数据库连接配置</div>
             <div class="controls-grid">
                 <div class="control-group">
                     <label>主机地址</label>
@@ -1007,6 +1008,7 @@
         let currentBusinessFilter = 'ALL';
         let modalBusinessFilter = 'ALL';
         let logFileRefreshInterval = null;
+        let appConfig = {};
 
         const businessTables = {
             inbound: [
@@ -1327,6 +1329,54 @@
             return formatted.trim();
         }
 
+        function loadAppConfig() {
+            fetch('/api/config')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.config) {
+                        appConfig = data.config;
+                        document.getElementById('dbHost').value = appConfig.host || 'localhost';
+                        document.getElementById('dbPort').value = appConfig.port || '3306';
+                        document.getElementById('dbUser').value = appConfig.user || '';
+                        document.getElementById('dbPassword').value = appConfig.password || '';
+                        document.getElementById('savePath').value = appConfig.savePath || 'D:\\sqllog_app';
+                    }
+                })
+                .catch(error => {
+                    console.error('加载配置失败:', error);
+                });
+        }
+
+        function saveAppConfig() {
+            const config = {
+                host: document.getElementById('dbHost').value,
+                port: document.getElementById('dbPort').value,
+                user: document.getElementById('dbUser').value,
+                password: document.getElementById('dbPassword').value,
+                savePath: document.getElementById('savePath').value
+            };
+
+            fetch('/api/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(config)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    appConfig = config;
+                    console.log('配置保存成功');
+                } else {
+                    console.error('保存配置失败:', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('保存配置失败:', error);
+            });
+        }
+
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
@@ -1340,6 +1390,8 @@
                 user: document.getElementById('dbUser').value,
                 password: document.getElementById('dbPassword').value
             };
+
+            saveAppConfig();
 
             try {
                 const res = await fetch('/api/connect', {
@@ -1849,6 +1901,7 @@
             }
         });
 
+        loadAppConfig();
         loadLogFiles();
     </script>
 </body>

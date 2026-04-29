@@ -2,12 +2,16 @@ const express = require('express');
 const mysql = require('mysql2');
 const fs = require('fs');
 const path = require('path');
+const cors = require('cors');
 
 const app = express();
 const PORT = 3003;
 
+app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
+
+const CONFIG_FILE = path.join(__dirname, 'config.json');
 
 let monitoring = false;
 let sqlData = [];
@@ -21,6 +25,27 @@ let lastTimerEnd = 0;
 let fetchIntervalId = null;
 let fileCounter = 1;
 const SAVE_THRESHOLD = 2000;
+
+function loadConfig() {
+  if (fs.existsSync(CONFIG_FILE)) {
+    try {
+      const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+      if (config.savePath) savePath = config.savePath;
+      return config;
+    } catch (err) {
+      console.error('加载配置失败:', err);
+    }
+  }
+  return null;
+}
+
+function saveConfig(config) {
+  try {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+  } catch (err) {
+    console.error('保存配置失败:', err);
+  }
+}
 
 function createConnection(config) {
   const conn = mysql.createConnection({
@@ -484,6 +509,23 @@ app.get('/api/databases/:name/tables', async (req, res) => {
   }
 });
 
+app.get('/api/config', (req, res) => {
+  const config = loadConfig();
+  res.json({ success: true, config: config || {} });
+});
+
+app.post('/api/config', (req, res) => {
+  try {
+    const config = req.body;
+    if (config.savePath) savePath = config.savePath;
+    saveConfig(config);
+    res.json({ success: true, message: '配置保存成功' });
+  } catch (err) {
+    console.error('保存配置失败:', err);
+    res.json({ success: false, message: err.message });
+  }
+});
+
 app.post('/api/disconnect', (req, res) => {
   try {
     monitoring = false;
@@ -517,25 +559,41 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🎯 SQL 监控系统已启动`);
+  console.log(`\n🎯 MySQL 实时SQL监控小工具 (V2.0)`);
   console.log(`📍 监听端口: ${PORT}`);
   console.log(`🌐 访问地址: http://localhost:${PORT}`);
   console.log(`\n📋 系统信息:`);
   console.log(`   - 监控间隔: 1秒`);
   console.log(`   - 数据源: performance_schema`);
   console.log(`   - 数据存储: TXT 文件`);
+  console.log(`   - 配置文件: config.json`);
   console.log(`\n🚀 功能特性:`);
   console.log(`   - 实时 SSE 推送`);
   console.log(`   - SQL 类型筛选`);
   console.log(`   - 执行时间筛选`);
-  console.log(`   - 自动数据持久化`);
-  console.log(`   - 无侵入性能监控`);
-  console.log(`\n👨‍💻 使用说明:`);
-  console.log(`   1. 启动系统`);
-  console.log(`   2. 在浏览器中打开访问地址`);
-  console.log(`   3. 输入数据库连接信息`);
-  console.log(`   4. 设置筛选条件并开始监控`);
-  console.log(`   5. 监控结束后自动保存到 TXT 文件`);
+  console.log(`   - 自动数据持久化 (2000条)`);
+  console.log(`   - 业务类型筛选: 入库/出库/补货/盘点/空容器/库存`);
+  console.log(`   - 历史日志查看、格式化、筛选`);
+  console.log(`   - 不自动跳转，固定页面宽度`);
+  console.log(`   - 支持库名.表名识别`);
+  console.log(`   - 无需部署，开箱即用`);
   console.log(`\n📁 默认保存路径: 项目根目录`);
-  console.log(`\n✅ 系统就绪！`);
+  console.log(`\n✅ 系统就绪！正在自动打开浏览器...`);
+
+  setTimeout(() => {
+    try {
+      const os = require('os');
+      const child_process = require('child_process');
+
+      if (os.platform() === 'win32') {
+        child_process.exec('start http://localhost:3003');
+      } else if (os.platform() === 'darwin') {
+        child_process.exec('open http://localhost:3003');
+      } else if (os.platform() === 'linux') {
+        child_process.exec('xdg-open http://localhost:3003');
+      }
+    } catch (err) {
+      console.warn('无法自动打开浏览器，请手动访问地址');
+    }
+  }, 1000);
 });
