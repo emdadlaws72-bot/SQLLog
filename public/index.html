@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时 SQL 监控系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 24px 32px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .header .status {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .status.connected {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .status.monitoring {
+            color: #3b82f6;
+            font-weight: 600;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .control-group {
+            margin-bottom: 16px;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .control-group input,
+        .control-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .control-group input:focus,
+        .control-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-top: 4px;
+        }
+
+        .sql-list {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            background: #f9fafb;
+        }
+
+        .sql-item {
+            background: white;
+            padding: 16px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .sql-item:last-child {
+            border-bottom: none;
+        }
+
+        .sql-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .sql-type {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .type-select {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .type-insert {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .type-update {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .type-delete {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .type-unknown {
+            background: #e5e7eb;
+            color: #4b5563;
+        }
+
+        .sql-info {
+            display: flex;
+            gap: 12px;
+            color: #6b7280;
+            font-size: 12px;
+            flex-wrap: wrap;
+        }
+
+        .sql-content {
+            margin-top: 8px;
+            padding: 12px;
+            background: #f3f4f6;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.5;
+            overflow-x: auto;
+        }
+
+        .filter-controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-group label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            padding: 8px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6b7280;
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        .table-info {
+            color: #374151;
+            font-size: 14px;
+            display: none;
+        }
+
+        .two-columns {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 24px;
+        }
+
+        @media (max-width: 1200px) {
+            .two-columns {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .log-list {
+            max-height: 600px;
+            overflow-y: auto;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            background: #f9fafb;
+        }
+
+        .log-item {
+            padding: 14px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .log-item:hover {
+            background: #e5e7eb;
+        }
+
+        .log-item.active {
+            background: #dbeafe;
+            border-left: 3px solid #3b82f6;
+        }
+
+        .log-name {
+            font-weight: 600;
+            color: #1f2937;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .log-meta {
+            font-size: 12px;
+            color: #6b7280;
+            display: flex;
+            gap: 16px;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 16px;
+            max-width: 900px;
+            width: 100%;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .modal-close {
+            background: #f3f4f6;
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #4b5563;
+        }
+
+        .modal-close:hover {
+            background: #e5e7eb;
+        }
+
+        .modal-content {
+            padding: 24px;
+            max-height: calc(90vh - 80px);
+            overflow-y: auto;
+        }
+
+        .sql-formatted {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: #1e3a5f;
+            color: #e0e7ff;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        .sql-formatted .keyword {
+            color: #f472b6;
+            font-weight: bold;
+        }
+
+        .sql-formatted .string {
+            color: #6ee7b7;
+        }
+
+        .sql-formatted .number {
+            color: #fbbf24;
+        }
+
+        .sql-formatted .comment {
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        .sql-formatted .function {
+            color: #60a5fa;
+        }
+
+        .sql-formatted .identifier {
+            color: #c4b5fd;
+        }
+
+        .log-header {
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #f3f4f6;
+            border-radius: 8px;
+        }
+
+        .log-header h4 {
+            font-size: 16px;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+
+        .log-header p {
+            font-size: 14px;
+            color: #6b7280;
+        }
+
+        .log-record {
+            margin-bottom: 24px;
+            padding-bottom: 24px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .log-record:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .log-record-header {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 12px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .log-record-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .tag-select {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .tag-insert {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .tag-update {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .tag-delete {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .tag-unknown {
+            background: #e5e7eb;
+            color: #4b5563;
+        }
+
+        .refresh-btn {
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 16px;
+            font-weight: 700;
+        }
+
+        .modal-filters {
+            background: #f9fafb;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .modal-filters-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 12px;
+        }
+
+        .modal-filters-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .modal-filter-group {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .modal-filter-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+
+        .modal-filter-group select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .modal-filter-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .filter-count {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        .filter-count span {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .business-filters {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            padding: 12px;
+            background: #f0f4f8;
+            border-radius: 8px;
+        }
+
+        .business-btn {
+            padding: 8px 16px;
+            border: 2px solid #d1d5db;
+            border-radius: 6px;
+            background: white;
+            color: #374151;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .business-btn:hover {
+            border-color: #9ca3af;
+            background: #f3f4f6;
+        }
+
+        .business-btn.active {
+            border-color: #3b82f6;
+            background: #3b82f6;
+            color: white;
+        }
+
+        .business-btn.active:hover {
+            background: #2563eb;
+            border-color: #2563eb;
+        }
+
+        .inbound-search {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .inbound-search input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 2px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .inbound-search input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .inbound-search button {
+            padding: 8px 16px;
+            border: 2px solid #3b82f6;
+            border-radius: 6px;
+            background: #3b82f6;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .inbound-search button:hover {
+            background: #2563eb;
+            border-color: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>📊 SQL 实时监控系统</h1>
+                <div class="status" id="status">未连接</div>
+            </div>
+            <div class="stat-item" style="margin: 0;">
+                <span class="stat-value" id="sqlCount">0</span>
+                <span class="stat-label">监控 SQL 数量</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">🔌 数据库连接</div>
+            <div class="controls-grid">
+                <div class="control-group">
+                    <label>主机地址</label>
+                    <input type="text" id="dbHost" placeholder="localhost" value="localhost">
+                </div>
+                <div class="control-group">
+                    <label>端口号</label>
+                    <input type="text" id="dbPort" placeholder="3306" value="3306">
+                </div>
+                <div class="control-group">
+                    <label>用户名</label>
+                    <input type="text" id="dbUser" placeholder="root">
+                </div>
+                <div class="control-group">
+                    <label>密码</label>
+                    <input type="password" id="dbPassword" placeholder="password">
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-success" onclick="connectDB()">
+                    <span>🌐</span> 连接数据库
+                </button>
+                <button class="btn btn-danger" onclick="disconnectDB()">
+                    <span>🔌</span> 断开连接
+                </button>
+            </div>
+        </div>
+
+        <div class="card" id="dbExplorerCard" style="display: none;">
+            <div class="section-title">🗄️ 数据库探索</div>
+            <div class="controls-grid">
+                <div class="control-group">
+                    <label>数据库列表</label>
+                    <select id="databaseSelect" onchange="loadTables()">
+                        <option value="">请选择数据库</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>数据表列表</label>
+                    <select id="tableSelect">
+                        <option value="">全部表</option>
+                    </select>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="loadDatabases()">
+                    <span>🔄</span> 刷新数据库列表
+                </button>
+                <button class="btn btn-secondary" onclick="clearSelection()">
+                    <span>🧹</span> 清除选择
+                </button>
+            </div>
+            <div class="table-info" id="tableInfo" style="margin-top: 16px; padding: 12px; background: #f3f4f6; border-radius: 8px;"></div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">⚙️ 监控配置</div>
+            <div class="controls-grid">
+                <div class="control-group">
+                    <label>执行时间筛选 (秒)</label>
+                    <input type="number" id="durationFilter" placeholder="0" value="0" min="0">
+                </div>
+                <div class="control-group">
+                    <label>SQL 类型筛选</label>
+                    <select id="typeFilter">
+                        <option value="ALL">全部类型</option>
+                        <option value="SELECT">SELECT</option>
+                        <option value="INSERT">INSERT</option>
+                        <option value="UPDATE">UPDATE</option>
+                        <option value="DELETE">DELETE</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>保存路径</label>
+                    <input type="text" id="savePath" placeholder="D:\\sqllog_app" value="D:\\sqllog_app">
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="startMonitor()">
+                    <span>▶️</span> 开始监控
+                </button>
+                <button class="btn btn-danger" onclick="stopMonitor()">
+                    <span>⏹️</span> 停止监控
+                </button>
+                <button class="btn btn-secondary" onclick="clearData()">
+                    <span>🧹</span> 清空数据
+                </button>
+            </div>
+        </div>
+
+        <div class="two-columns">
+            <div>
+                <div class="card">
+                    <div class="section-title">📋 SQL 执行记录</div>
+                    <div class="filter-controls">
+                        <div class="filter-group">
+                            <label>执行时间 ≥</label>
+                            <input type="number" id="viewDuration" placeholder="0" value="0" min="0">
+                            <label>秒</label>
+                        </div>
+                        <div class="filter-group">
+                            <label>类型</label>
+                            <select id="viewType">
+                                <option value="ALL">全部</option>
+                                <option value="SELECT">SELECT</option>
+                                <option value="INSERT">INSERT</option>
+                                <option value="UPDATE">UPDATE</option>
+                                <option value="DELETE">DELETE</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>涉及表</label>
+                            <select id="involvedTableSelect">
+                                <option value="ALL">全部表</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="business-filters">
+                        <button class="business-btn" id="btnAll" onclick="setBusinessFilter('ALL')">
+                            全部业务
+                        </button>
+                        <button class="business-btn" id="btnInbound" onclick="setBusinessFilter('inbound')">
+                            📦 入库业务
+                        </button>
+                        <button class="business-btn" id="btnOutbound" onclick="setBusinessFilter('outbound')">
+                            📤 出库业务
+                        </button>
+                        <button class="business-btn" id="btnRestock" onclick="setBusinessFilter('restock')">
+                            🔄 补货业务
+                        </button>
+                        <button class="business-btn" id="btnStocktake" onclick="setBusinessFilter('stocktake')">
+                            📊 盘点业务
+                        </button>
+                        <button class="business-btn" id="btnEmpty" onclick="setBusinessFilter('empty')">
+                            📋 空容器管理
+                        </button>
+                        <button class="business-btn" id="btnInventory" onclick="setBusinessFilter('inventory')">
+                            📦 库存管理
+                        </button>
+                    </div>
+                    <div class="inbound-search">
+                        <input type="text" id="inboundOrderNo" placeholder="输入入库单号，如：94210169638">
+                        <button onclick="queryInboundSql()">
+                            🔍 查询入库单
+                        </button>
+                    </div>
+                    <div class="sql-list" id="sqlList">
+                        <div class="empty-state">
+                            <h3>🚀 准备开始监控</h3>
+                            <p>请先连接数据库，然后点击"开始监控"按钮</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <div class="card">
+                    <div class="section-title">📁 历史日志文件</div>
+                    <div class="refresh-btn">
+                        <button class="btn btn-primary" onclick="loadLogFiles()">
+                            <span>🔄</span> 刷新
+                        </button>
+                    </div>
+                    <div class="log-list" id="logList">
+                        <div class="empty-state">
+                            <h3>暂无日志文件</h3>
+                            <p>开始监控后会自动每2000条保存一个文件</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="logModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle">日志文件内容</div>
+                <button class="modal-close" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-content" id="modalContent">
+                <div class="modal-filters" id="modalFilters" style="display: none;">
+                    <div class="modal-filters-title">🔍 筛选条件</div>
+                    <div class="modal-filters-row">
+                        <div class="modal-filter-group">
+                            <label>数据库</label>
+                            <select id="modalDatabaseFilter" onchange="applyModalFilters()">
+                                <option value="ALL">全部数据库</option>
+                            </select>
+                        </div>
+                        <div class="modal-filter-group">
+                            <label>SQL类型</label>
+                            <select id="modalTypeFilter" onchange="applyModalFilters()">
+                                <option value="ALL">全部类型</option>
+                                <option value="SELECT">SELECT</option>
+                                <option value="INSERT">INSERT</option>
+                                <option value="UPDATE">UPDATE</option>
+                                <option value="DELETE">DELETE</option>
+                            </select>
+                        </div>
+                        <div class="modal-filter-group">
+                            <label>表名</label>
+                            <select id="modalTableFilter" onchange="applyModalFilters()">
+                                <option value="ALL">全部表</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filter-count" id="filterCount">
+                        显示 <span id="filteredCount">0</span> / <span id="totalCount">0</span> 条记录
+                    </div>
+                </div>
+                <div class="business-filters">
+                    <button class="business-btn" id="modalBtnAll" onclick="setModalBusinessFilter('ALL')">
+                        全部业务
+                    </button>
+                    <button class="business-btn" id="modalBtnInbound" onclick="setModalBusinessFilter('inbound')">
+                        📦 入库业务
+                    </button>
+                    <button class="business-btn" id="modalBtnOutbound" onclick="setModalBusinessFilter('outbound')">
+                        📤 出库业务
+                    </button>
+                    <button class="business-btn" id="modalBtnRestock" onclick="setModalBusinessFilter('restock')">
+                        🔄 补货业务
+                    </button>
+                    <button class="business-btn" id="modalBtnStocktake" onclick="setModalBusinessFilter('stocktake')">
+                        📊 盘点业务
+                    </button>
+                    <button class="business-btn" id="modalBtnEmpty" onclick="setModalBusinessFilter('empty')">
+                        📋 空容器管理
+                    </button>
+                    <button class="business-btn" id="modalBtnInventory" onclick="setModalBusinessFilter('inventory')">
+                        📦 库存管理
+                    </button>
+                </div>
+                </div>
+                <div id="modalRecords"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let connected = false;
+        let monitoring = false;
+        let allData = [];
+        let eventSource = null;
+        let databases = [];
+        let tables = [];
+        let currentFilteredData = [];
+        let logFiles = [];
+        let currentLogRecords = [];
+        let currentBusinessFilter = 'ALL';
+        let modalBusinessFilter = 'ALL';
+
+        const businessTables = {
+            inbound: [
+                'i_putaway_order', 'i_putaway_order_detail', 'i_receipt_order',
+                'i_inbound_feedback', 'i_inbound_feedback_detail', 'm_move_task',
+                'm_assign_order', 'v_inventory_bin', 'v_inventory_area',
+                'v_inventory_log_increase', 't_wes_putaway_task_interface',
+                't_wes_putaway_task_detail_interface'
+            ],
+            outbound: [
+                'o_origin_out_order', 'o_origin_out_order_detail', 'o_out_order',
+                'o_out_order_detail', 'o_out_order_hit', 'o_out_order_detail_hit_result',
+                'o_wait_wave_order', 'o_wave', 'o_pick_order', 'm_move_task',
+                'o_outbound_feedback', 'o_outbound_feedback_container',
+                'o_outbound_feedback_order', 'v_inventory_bin', 'v_inventory_log_decrease',
+                't_wes_picking_task_interface', 't_wes_picking_task_detail_interface'
+            ],
+            restock: [
+                'v_lack_order', 's_restock_emergency_request', 's_move_plan',
+                's_move_plan_detail', 'v_hit_order', 'm_move_task', 'v_inventory_bin',
+                'b_strategy_restock_config', 'b_strategy_zero_step'
+            ],
+            stocktake: [
+                's_stocktake_plan', 's_stocktake_order', 's_stocktake_task',
+                's_stocktake_result', 'v_inventory_bin', 'v_inventory_log_stock',
+                't_wes_stocktake_task_interface', 't_wes_stocktake_task_detail_interface'
+            ],
+            empty: [
+                'o_out_empty_container_order', 'b_container_node', 'b_container_relation',
+                't_wes_empty_collect_log', 't_wes_empty_collect_config'
+            ],
+            inventory: [
+                'v_inventory_bin', 'v_inventory_area', 'v_inventory_batch',
+                'v_inventory_unique', 'v_inventory_log_increase', 'v_inventory_log_decrease',
+                'v_inventory_log_stock', 'i_inventory_adjust'
+            ]
+        };
+
+        const statusEl = document.getElementById('status');
+        const sqlListEl = document.getElementById('sqlList');
+        const sqlCountEl = document.getElementById('sqlCount');
+
+        function extractTableNames(sql) {
+            const tables = new Set();
+            const sqlLower = sql.toLowerCase();
+
+            const selectFromRegex = /from\s+((?:`?[\w]+`?\.)?`?[\w]+`?)/gi;
+            let match;
+            while ((match = selectFromRegex.exec(sqlLower)) !== null) {
+                const table = extractTableName(match[1]);
+                if (table) tables.add(table);
+            }
+
+            const joinRegex = /join\s+((?:`?[\w]+`?\.)?`?[\w]+`?)/gi;
+            while ((match = joinRegex.exec(sqlLower)) !== null) {
+                const table = extractTableName(match[1]);
+                if (table) tables.add(table);
+            }
+
+            const insertRegex = /insert\s+into\s+((?:`?[\w]+`?\.)?`?[\w]+`?)/i;
+            const insertMatch = sqlLower.match(insertRegex);
+            if (insertMatch) {
+                const table = extractTableName(insertMatch[1]);
+                if (table) tables.add(table);
+            }
+
+            const updateRegex = /update\s+((?:`?[\w]+`?\.)?`?[\w]+`?)/i;
+            const updateMatch = sqlLower.match(updateRegex);
+            if (updateMatch) {
+                const table = extractTableName(updateMatch[1]);
+                if (table) tables.add(table);
+            }
+
+            const deleteRegex = /delete\s+from\s+((?:`?[\w]+`?\.)?`?[\w]+`?)/i;
+            const deleteMatch = sqlLower.match(deleteRegex);
+            if (deleteMatch) {
+                const table = extractTableName(deleteMatch[1]);
+                if (table) tables.add(table);
+            }
+
+            return Array.from(tables);
+        }
+
+        function isTableInBusiness(sql, businessType) {
+            if (businessType === 'ALL') {
+                return true;
+            }
+
+            const tables = extractTableNames(sql);
+            const targetTables = businessTables[businessType] || [];
+
+            return tables.some(table =>
+                targetTables.some(target =>
+                    table.toLowerCase() === target.toLowerCase()
+                )
+            );
+        }
+
+        function setBusinessFilter(businessType) {
+            currentBusinessFilter = businessType;
+            updateBusinessButtons();
+            updateDisplay();
+        }
+
+        function setModalBusinessFilter(businessType) {
+            modalBusinessFilter = businessType;
+            updateModalBusinessButtons();
+            applyModalFilters();
+        }
+
+        function updateBusinessButtons() {
+            document.querySelectorAll('.business-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            if (currentBusinessFilter === 'ALL') {
+                document.getElementById('btnAll').classList.add('active');
+            } else {
+                document.getElementById('btn' + capitalizeFirst(currentBusinessFilter)).classList.add('active');
+            }
+        }
+
+        function updateModalBusinessButtons() {
+            document.querySelectorAll('#logModal .business-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            if (modalBusinessFilter === 'ALL') {
+                document.getElementById('modalBtnAll').classList.add('active');
+            } else {
+                document.getElementById('modalBtn' + capitalizeFirst(modalBusinessFilter)).classList.add('active');
+            }
+        }
+
+        function capitalizeFirst(str) {
+            return str.charAt(0).toUpperCase() + str.slice(1);
+        }
+
+        function queryInboundSql() {
+            const orderNo = document.getElementById('inboundOrderNo').value.trim();
+            if (!orderNo) {
+                alert('请输入入库单号');
+                return;
+            }
+
+            fetch('/api/queryInboundSql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ orderNo: orderNo })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('查询成功');
+                } else {
+                    alert('查询失败: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('查询入库单SQL失败:', error);
+                alert('查询失败');
+            });
+        }
+
+        function extractTableName(str) {
+            let name = str.trim();
+            if (name.includes('.')) {
+                const parts = name.split('.');
+                name = parts[parts.length - 1].trim();
+            }
+            name = name.replace(/^`+/, '').replace(/`+$/, '');
+            return name;
+        }
+
+        function updateInvolvedTablesSelect(data) {
+            const allTables = new Set();
+            data.forEach(item => {
+                const tables = extractTableNames(item.sql);
+                tables.forEach(t => allTables.add(t));
+            });
+
+            const select = document.getElementById('involvedTableSelect');
+            const currentValue = select.value;
+            select.innerHTML = '<option value="ALL">全部表</option>' +
+                Array.from(allTables).sort().map(table => `<option value="${table}">${table}</option>`).join('');
+
+            if (Array.from(allTables).includes(currentValue)) {
+                select.value = currentValue;
+            }
+        }
+
+        function applyFilters() {
+            const durationFilter = parseFloat(document.getElementById('viewDuration').value);
+            const typeFilter = document.getElementById('viewType').value;
+            const involvedTableFilter = document.getElementById('involvedTableSelect').value;
+            const selectedDatabase = document.getElementById('databaseSelect').value;
+            const selectedTable = document.getElementById('tableSelect').value;
+
+            const filtered = allData.filter(item => {
+                const durationMatch = durationFilter === 0 || item.duration >= durationFilter;
+                const typeMatch = typeFilter === 'ALL' || item.type === typeFilter;
+
+                let databaseMatch = true;
+                if (selectedDatabase) {
+                    if (item.schema) {
+                        databaseMatch = item.schema.toLowerCase() === selectedDatabase.toLowerCase();
+                    } else {
+                        databaseMatch = false;
+                    }
+                }
+
+                let tableMatch = true;
+                if (selectedDatabase && selectedTable) {
+                    const tablesInSql = extractTableNames(item.sql);
+                    tableMatch = tablesInSql.some(t => t.toLowerCase() === selectedTable.toLowerCase());
+                }
+
+                let involvedTableMatch = true;
+                if (involvedTableFilter !== 'ALL') {
+                    const tablesInSql = extractTableNames(item.sql);
+                    involvedTableMatch = tablesInSql.some(t => t.toLowerCase() === involvedTableFilter.toLowerCase());
+                }
+
+                const businessMatch = isTableInBusiness(item.sql, currentBusinessFilter);
+
+                return durationMatch && typeMatch && databaseMatch && tableMatch && involvedTableMatch && businessMatch;
+            });
+
+            return filtered;
+        }
+
+        function updateDisplay() {
+            const filtered = applyFilters();
+            currentFilteredData = filtered;
+
+            updateInvolvedTablesSelect(filtered);
+
+            sqlCountEl.textContent = filtered.length;
+
+            if (filtered.length === 0) {
+                sqlListEl.innerHTML = `
+                    <div class="empty-state">
+                        <h3>📭 暂无 SQL 执行记录</h3>
+                        <p>${monitoring ? '等待数据库操作...' : '监控已停止'}</p>
+                    </div>
+                `;
+                return;
+            }
+
+            sqlListEl.innerHTML = filtered.map(sql => {
+                const tablesInSql = extractTableNames(sql.sql);
+                const tableDisplay = tablesInSql.length > 0 ? `<span>📄 ${tablesInSql.join(', ')}</span>` : '';
+                return `
+                    <div class="sql-item">
+                        <div class="sql-header">
+                            <span class="sql-type type-${sql.type.toLowerCase()}">${sql.type}</span>
+                            <div class="sql-info">
+                                <span>⏱️ ${sql.duration.toFixed(3)}秒</span>
+                                <span>🧵 ID: ${sql.threadId}</span>
+                                <span>📅 ${new Date(sql.timestamp).toLocaleString()}</span>
+                                ${sql.schema ? `<span>📊 ${sql.schema}</span>` : ''}
+                                ${tableDisplay}
+                            </div>
+                        </div>
+                        <div class="sql-content">${escapeHtml(sql.sql)}</div>
+                    </div>
+                `;
+            }).join('');
+
+            sqlListEl.scrollTop = sqlListEl.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function connectDB() {
+            const config = {
+                host: document.getElementById('dbHost').value,
+                port: parseInt(document.getElementById('dbPort').value),
+                user: document.getElementById('dbUser').value,
+                password: document.getElementById('dbPassword').value
+            };
+
+            try {
+                const res = await fetch('/api/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    connected = true;
+                    statusEl.textContent = '已连接';
+                    statusEl.className = 'status connected';
+                    statusEl.innerHTML = '🌐 数据库已连接';
+                    document.getElementById('dbExplorerCard').style.display = 'block';
+                    await loadDatabases();
+                    await loadLogFiles();
+                } else {
+                    alert('连接失败: ' + data.message);
+                }
+            } catch (err) {
+                alert('连接失败: ' + err.message);
+            }
+        }
+
+        async function disconnectDB() {
+            try {
+                const res = await fetch('/api/disconnect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    connected = false;
+                    monitoring = false;
+                    if (eventSource) {
+                        eventSource.close();
+                        eventSource = null;
+                    }
+                    statusEl.textContent = '未连接';
+                    statusEl.className = 'status';
+                    document.getElementById('dbExplorerCard').style.display = 'none';
+                    clearSelection();
+                    allData = [];
+                    currentFilteredData = [];
+                    updateDisplay();
+                } else {
+                    alert('断开连接失败: ' + data.message);
+                }
+            } catch (err) {
+                console.error('断开连接失败:', err);
+                alert('断开连接失败: ' + err.message);
+                connected = false;
+                statusEl.textContent = '未连接';
+                statusEl.className = 'status';
+                document.getElementById('dbExplorerCard').style.display = 'none';
+                clearSelection();
+            }
+        }
+
+        async function startMonitor() {
+            if (!connected) {
+                alert('请先连接数据库');
+                return;
+            }
+
+            const params = {
+                duration: parseFloat(document.getElementById('durationFilter').value),
+                type: document.getElementById('typeFilter').value,
+                savePath: document.getElementById('savePath').value
+            };
+
+            try {
+                const res = await fetch('/api/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params)
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    monitoring = true;
+                    statusEl.innerHTML = '▶️ 监控中';
+                    statusEl.className = 'status monitoring';
+                    startStream();
+                } else {
+                    alert('启动失败: ' + data.message);
+                }
+            } catch (err) {
+                alert('启动失败: ' + err.message);
+            }
+        }
+
+        async function stopMonitor() {
+            if (!monitoring) return;
+
+            try {
+                const res = await fetch('/api/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    monitoring = false;
+                    statusEl.textContent = '已停止';
+                    statusEl.className = 'status';
+                    if (eventSource) {
+                        eventSource.close();
+                        eventSource = null;
+                    }
+                    const msg = data.fileName
+                        ? `监控已停止，已保存 ${data.recordCount} 条记录到文件: ${data.fileName}`
+                        : data.message;
+                    alert(msg);
+                    await loadLogFiles();
+                } else {
+                    alert('停止监控失败: ' + data.message);
+                }
+            } catch (err) {
+                alert('停止失败: ' + err.message);
+            }
+        }
+
+        function startStream() {
+            eventSource = new EventSource('/api/stream');
+
+            eventSource.onmessage = (event) => {
+                allData = JSON.parse(event.data);
+                updateDisplay();
+            };
+
+            eventSource.onerror = () => {
+                console.error('Stream error');
+                eventSource.close();
+            };
+        }
+
+        async function loadDatabases() {
+            try {
+                const res = await fetch('/api/databases');
+                const data = await res.json();
+                if (data.success) {
+                    databases = data.databases;
+                    const select = document.getElementById('databaseSelect');
+                    select.innerHTML = '<option value="">请选择数据库</option>' +
+                        databases.map(db => `<option value="${db}">${db}</option>`).join('');
+                } else {
+                    alert('获取数据库列表失败: ' + data.message);
+                }
+            } catch (err) {
+                alert('获取数据库列表失败: ' + err.message);
+            }
+        }
+
+        async function loadTables() {
+            const selectedDb = document.getElementById('databaseSelect').value;
+            if (!selectedDb) {
+                document.getElementById('tableSelect').innerHTML = '<option value="">全部表</option>';
+                document.getElementById('tableInfo').innerHTML = '';
+                updateDisplay();
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/databases/${selectedDb}/tables`);
+                const data = await res.json();
+                if (data.success) {
+                    tables = data.tables;
+                    const select = document.getElementById('tableSelect');
+                    select.innerHTML = '<option value="">全部表</option>' +
+                        tables.map(table => `<option value="${table}">${table}</option>`).join('');
+                    displayTableCount(selectedDb, tables.length);
+                    updateDisplay();
+                } else {
+                    alert('获取表列表失败: ' + data.message);
+                }
+            } catch (err) {
+                alert('获取表列表失败: ' + err.message);
+            }
+        }
+
+        function displayTableCount(dbName, count) {
+            const infoEl = document.getElementById('tableInfo');
+            infoEl.style.display = 'block';
+            if (count === 0) {
+                infoEl.innerHTML = `📊 数据库 <strong>${dbName}</strong> 中没有数据表`;
+            } else {
+                infoEl.innerHTML = `📊 数据库 <strong>${dbName}</strong> 中有 <strong>${count}</strong> 个数据表`;
+            }
+        }
+
+        function clearSelection() {
+            document.getElementById('databaseSelect').value = '';
+            document.getElementById('tableSelect').innerHTML = '<option value="">全部表</option>';
+            document.getElementById('tableInfo').innerHTML = '';
+            document.getElementById('tableInfo').style.display = 'none';
+            updateDisplay();
+        }
+
+        async function clearData() {
+            await fetch('/api/clear');
+            allData = [];
+            currentFilteredData = [];
+            updateDisplay();
+        }
+
+        async function loadLogFiles() {
+            try {
+                const res = await fetch('/api/logs');
+                const data = await res.json();
+                if (data.success) {
+                    logFiles = data.files;
+                    renderLogList();
+                }
+            } catch (err) {
+                console.error('获取日志列表失败:', err);
+            }
+        }
+
+        function renderLogList() {
+            const listEl = document.getElementById('logList');
+            if (!logFiles || logFiles.length === 0) {
+                listEl.innerHTML = `
+                    <div class="empty-state">
+                        <h3>暂无日志文件</h3>
+                        <p>开始监控后会自动每2000条保存一个文件</p>
+                    </div>
+                `;
+                return;
+            }
+
+            listEl.innerHTML = logFiles.map(file => `
+                <div class="log-item" onclick="openLogFile('${file.name}')">
+                    <div class="log-name">${file.name}</div>
+                    <div class="log-meta">
+                        <span>📁 ${formatSize(file.size)}</span>
+                        <span>📅 ${new Date(file.createdAt).toLocaleString()}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+        }
+
+        async function openLogFile(filename) {
+            try {
+                const res = await fetch(`/api/logs/${encodeURIComponent(filename)}`);
+                const data = await res.json();
+                if (data.success) {
+                    showLogModal(filename, data.content);
+                } else {
+                    alert('读取文件失败: ' + data.message);
+                }
+            } catch (err) {
+                alert('读取文件失败: ' + err.message);
+            }
+        }
+
+        function showLogModal(filename, content) {
+            document.getElementById('modalTitle').textContent = filename;
+            currentLogRecords = parseLogContent(content);
+            populateModalFilters();
+            applyModalFilters();
+            document.getElementById('modalFilters').style.display = 'block';
+            document.getElementById('logModal').classList.add('show');
+        }
+
+        function parseLogContent(content) {
+            const lines = content.split('\n');
+            const records = [];
+            let currentRecord = null;
+            let inSQL = false;
+            let sqlBuffer = [];
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+
+                if (/^\d+\.\s\[/.test(line)) {
+                    if (currentRecord) {
+                        currentRecord.sql = sqlBuffer.join('\n').trim();
+                        records.push(currentRecord);
+                    }
+
+                    const dateMatch = line.match(/^\d+\.\s\[(.+?)\]/);
+                    currentRecord = {
+                        date: dateMatch ? dateMatch[1] : '',
+                        type: '',
+                        duration: '',
+                        threadId: '',
+                        database: '',
+                        sql: ''
+                    };
+                    inSQL = false;
+                    sqlBuffer = [];
+                } else if (line.startsWith('类型: ')) {
+                    if (currentRecord) currentRecord.type = line.substring(4);
+                } else if (line.startsWith('执行时间: ')) {
+                    if (currentRecord) currentRecord.duration = line.substring(6);
+                } else if (line.startsWith('线程ID: ')) {
+                    if (currentRecord) currentRecord.threadId = line.substring(6);
+                } else if (line.startsWith('数据库: ')) {
+                    if (currentRecord) currentRecord.database = line.substring(5);
+                } else if (line.startsWith('SQL: ')) {
+                    inSQL = true;
+                    if (currentRecord) {
+                        sqlBuffer.push(line.substring(5));
+                    }
+                } else if (line.startsWith('========')) {
+                    continue;
+                } else if (inSQL && line.trim()) {
+                    sqlBuffer.push(line);
+                }
+            }
+
+            if (currentRecord && sqlBuffer.length > 0) {
+                currentRecord.sql = sqlBuffer.join('\n').trim();
+                records.push(currentRecord);
+            }
+
+            if (records.length === 0) {
+                return [{
+                    date: new Date().toLocaleString(),
+                    type: 'UNKNOWN',
+                    duration: '0秒',
+                    threadId: '0',
+                    database: '',
+                    sql: content.trim()
+                }];
+            }
+
+            records.forEach(record => {
+                record.tables = extractTableNames(record.sql);
+            });
+
+            return records;
+        }
+
+        function populateModalFilters() {
+            const databases = new Set();
+            const tables = new Set();
+
+            currentLogRecords.forEach(record => {
+                if (record.database) {
+                    databases.add(record.database);
+                }
+                if (record.tables) {
+                    record.tables.forEach(table => {
+                        tables.add(table);
+                    });
+                } else {
+                    const sqlTables = extractTableNames(record.sql);
+                    sqlTables.forEach(table => {
+                        tables.add(table);
+                    });
+                }
+            });
+
+            const dbSelect = document.getElementById('modalDatabaseFilter');
+            dbSelect.innerHTML = '<option value="ALL">全部数据库</option>' +
+                Array.from(databases).sort().map(db => `<option value="${db}">${db}</option>`).join('');
+
+            const tableSelect = document.getElementById('modalTableFilter');
+            tableSelect.innerHTML = '<option value="ALL">全部表</option>' +
+                Array.from(tables).sort().map(table => `<option value="${table}">${table}</option>`).join('');
+
+            document.getElementById('modalTypeFilter').value = 'ALL';
+
+            document.getElementById('totalCount').textContent = currentLogRecords.length;
+        }
+
+        function applyModalFilters() {
+            const selectedDb = document.getElementById('modalDatabaseFilter').value;
+            const selectedType = document.getElementById('modalTypeFilter').value;
+            const selectedTable = document.getElementById('modalTableFilter').value;
+
+            const filteredRecords = currentLogRecords.filter(record => {
+                const dbMatch = selectedDb === 'ALL' || record.database === selectedDb;
+                const typeMatch = selectedType === 'ALL' || (record.type && record.type.toUpperCase().includes(selectedType));
+
+                let tableMatch = true;
+                if (selectedTable !== 'ALL') {
+                    if (record.tables) {
+                        tableMatch = record.tables.some(t => t === selectedTable);
+                    } else {
+                        const sqlTables = extractTableNames(record.sql);
+                        tableMatch = sqlTables.some(t => t === selectedTable);
+                    }
+                }
+
+                const businessMatch = isTableInBusiness(record.sql, modalBusinessFilter);
+
+                return dbMatch && typeMatch && tableMatch && businessMatch;
+            });
+
+            renderModalRecords(filteredRecords);
+            document.getElementById('filteredCount').textContent = filteredRecords.length;
+        }
+
+        function renderModalRecords(records) {
+            const container = document.getElementById('modalRecords');
+
+            if (records.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>未找到匹配的记录</h3>
+                        <p>请尝试调整筛选条件</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            records.forEach((record, index) => {
+                const typeClass = getTypeClass(record.type);
+                html += `
+                    <div class="log-record">
+                        <div class="log-record-header">
+                            <span class="log-record-tag ${typeClass}">${record.type || 'UNKNOWN'}</span>
+                            ${record.duration ? `<span>⏱️ ${record.duration}</span>` : ''}
+                            ${record.threadId ? `<span>🧵 ${record.threadId}</span>` : ''}
+                            ${record.database ? `<span>📊 ${record.database}</span>` : ''}
+                            <span>📅 ${record.date}</span>
+                        </div>
+                        <div class="sql-formatted">${formatAndHighlightSQL(record.sql)}</div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function getTypeClass(type) {
+            const t = (type || '').toUpperCase();
+            if (t.includes('SELECT')) return 'tag-select';
+            if (t.includes('INSERT')) return 'tag-insert';
+            if (t.includes('UPDATE')) return 'tag-update';
+            if (t.includes('DELETE')) return 'tag-delete';
+            return 'tag-unknown';
+        }
+
+        function formatAndHighlightSQL(sql) {
+            let formatted = sql;
+            const keywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'FROM', 'WHERE', 'AND', 'OR', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'ON', 'GROUP BY', 'ORDER BY', 'HAVING', 'LIMIT', 'INTO', 'VALUES', 'SET', 'CREATE', 'ALTER', 'DROP', 'TABLE', 'DATABASE', 'USE', 'IF', 'NOT', 'NULL', 'DEFAULT', 'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES', 'UNIQUE', 'INDEX', 'COUNT', 'SUM', 'AVG', 'MAX', 'MIN', 'DISTINCT', 'AS', 'IS', 'BETWEEN', 'LIKE', 'IN'];
+
+            keywords.forEach(keyword => {
+                const regex = new RegExp('\\b' + keyword + '\\b', 'gi');
+                formatted = formatted.replace(regex, match => `<span class="keyword">${match.toUpperCase()}</span>`);
+            });
+
+            const stringRegex = /'([^'\\]|\\.)*'/g;
+            formatted = formatted.replace(stringRegex, match => `<span class="string">${match}</span>`);
+
+            const numberRegex = /\b\d+(\.\d+)?\b/g;
+            formatted = formatted.replace(numberRegex, match => `<span class="number">${match}</span>`);
+
+            const commentRegex = /--.*$/gm;
+            formatted = formatted.replace(commentRegex, match => `<span class="comment">${match}</span>`);
+
+            const functionRegex = /\b(COUNT|SUM|AVG|MAX|MIN|CONCAT|SUBSTR|UPPER|LOWER|NOW|DATE|TIME)\s*\(/gi;
+            formatted = formatted.replace(functionRegex, match => `<span class="function">${match}</span>`);
+
+            return formatted;
+        }
+
+        function closeModal() {
+            document.getElementById('logModal').classList.remove('show');
+        }
+
+        document.getElementById('logModal').addEventListener('click', (e) => {
+            if (e.target.id === 'logModal') {
+                closeModal();
+            }
+        });
+
+        document.getElementById('durationFilter').addEventListener('input', updateDisplay);
+        document.getElementById('typeFilter').addEventListener('change', updateDisplay);
+        document.getElementById('viewDuration').addEventListener('input', updateDisplay);
+        document.getElementById('viewType').addEventListener('change', updateDisplay);
+        document.getElementById('involvedTableSelect').addEventListener('change', updateDisplay);
+        document.getElementById('databaseSelect').addEventListener('change', updateDisplay);
+        document.getElementById('tableSelect').addEventListener('change', updateDisplay);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        loadLogFiles();
+    </script>
+</body>
+</html>
