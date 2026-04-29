@@ -29,8 +29,7 @@ function createConnection(config) {
     user: config.user,
     password: config.password,
     database: 'performance_schema',
-    connectTimeout: 10000,
-    acquireTimeout: 60000
+    connectTimeout: 10000
   });
 
   conn.on('error', (err) => {

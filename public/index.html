@@ -16,10 +16,13 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
+            width: 1400px;
+            margin: 0 auto;
+            box-sizing: border-box;
         }
 
         .container {
-            max-width: 1400px;
+            width: 1360px;
             margin: 0 auto;
         }
 
@@ -279,13 +282,14 @@
         .sql-content {
             margin-top: 8px;
             padding: 12px;
-            background: #f3f4f6;
+            background: #1e3a5f;
+            color: #e0e7ff;
             border-radius: 6px;
             font-family: 'Courier New', monospace;
             font-size: 13px;
             white-space: pre-wrap;
             word-wrap: break-word;
-            line-height: 1.5;
+            line-height: 1.8;
             overflow-x: auto;
         }
 
@@ -368,14 +372,8 @@
 
         .two-columns {
             display: grid;
-            grid-template-columns: 1fr 350px;
+            grid-template-columns: 986px 350px;
             gap: 24px;
-        }
-
-        @media (max-width: 1200px) {
-            .two-columns {
-                grid-template-columns: 1fr;
-            }
         }
 
         .log-list {
@@ -1257,9 +1255,13 @@
                 return;
             }
 
+            const scrollTop = sqlListEl.scrollTop;
+            const scrollHeight = sqlListEl.scrollHeight;
+
             sqlListEl.innerHTML = filtered.map(sql => {
                 const tablesInSql = extractTableNames(sql.sql);
                 const tableDisplay = tablesInSql.length > 0 ? `<span>📄 ${tablesInSql.join(', ')}</span>` : '';
+                const formattedSql = formatSQL(sql.sql);
                 return `
                     <div class="sql-item">
                         <div class="sql-header">
@@ -1272,12 +1274,56 @@
                                 ${tableDisplay}
                             </div>
                         </div>
-                        <div class="sql-content">${escapeHtml(sql.sql)}</div>
+                        <div class="sql-content">${escapeHtml(formattedSql)}</div>
                     </div>
                 `;
             }).join('');
 
-            sqlListEl.scrollTop = sqlListEl.scrollHeight;
+            const newScrollHeight = sqlListEl.scrollHeight;
+            if (scrollTop > 0) {
+                sqlListEl.scrollTop = scrollTop + (newScrollHeight - scrollHeight);
+            }
+        }
+
+        function formatSQL(sql) {
+            const keywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'FROM', 'WHERE', 'AND', 'OR', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'ON', 'GROUP BY', 'ORDER BY', 'HAVING', 'LIMIT', 'INTO', 'VALUES', 'SET', 'CREATE', 'ALTER', 'DROP', 'TABLE', 'DATABASE', 'USE', 'IF', 'NOT', 'NULL', 'DEFAULT', 'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES', 'UNIQUE', 'INDEX', 'COUNT', 'SUM', 'AVG', 'MAX', 'MIN', 'DISTINCT', 'AS', 'IS', 'BETWEEN', 'LIKE', 'IN'];
+
+            let formatted = sql.trim();
+
+            formatted = formatted.replace(/\s+/g, ' ');
+
+            keywords.forEach(keyword => {
+                const regex = new RegExp('\\b' + keyword + '\\b', 'gi');
+                formatted = formatted.replace(regex, match => `\n${match.toUpperCase()}`);
+            });
+
+            formatted = formatted.replace(/,(\S)/g, ', $1');
+
+            formatted = formatted.replace(/\(\s*/g, '(\n    ');
+            formatted = formatted.replace(/\s*\)/g, '\n)');
+
+            formatted = formatted.replace(/VALUES\s*\(/g, 'VALUES (\n    ');
+            formatted = formatted.replace(/\),\s*\(/g, '),\n    (');
+
+            formatted = formatted.replace(/FROM\s*/g, '\nFROM ');
+            formatted = formatted.replace(/WHERE\s*/g, '\nWHERE ');
+            formatted = formatted.replace(/GROUP BY\s*/g, '\nGROUP BY ');
+            formatted = formatted.replace(/ORDER BY\s*/g, '\nORDER BY ');
+            formatted = formatted.replace(/HAVING\s*/g, '\nHAVING ');
+            formatted = formatted.replace(/LIMIT\s*/g, '\nLIMIT ');
+            formatted = formatted.replace(/INNER JOIN\s*/g, '\nINNER JOIN ');
+            formatted = formatted.replace(/LEFT JOIN\s*/g, '\nLEFT JOIN ');
+            formatted = formatted.replace(/RIGHT JOIN\s*/g, '\nRIGHT JOIN ');
+
+            formatted = formatted.split('\n').map(line => {
+                line = line.trim();
+                if (line && !keywords.some(key => key === line.toUpperCase())) {
+                    return '    ' + line;
+                }
+                return line;
+            }).join('\n');
+
+            return formatted.trim();
         }
 
         function escapeHtml(text) {
@@ -1739,7 +1785,8 @@
         }
 
         function formatAndHighlightSQL(sql) {
-            let formatted = sql;
+            let formatted = formatSQL(sql);
+
             const keywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'FROM', 'WHERE', 'AND', 'OR', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'ON', 'GROUP BY', 'ORDER BY', 'HAVING', 'LIMIT', 'INTO', 'VALUES', 'SET', 'CREATE', 'ALTER', 'DROP', 'TABLE', 'DATABASE', 'USE', 'IF', 'NOT', 'NULL', 'DEFAULT', 'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES', 'UNIQUE', 'INDEX', 'COUNT', 'SUM', 'AVG', 'MAX', 'MIN', 'DISTINCT', 'AS', 'IS', 'BETWEEN', 'LIKE', 'IN'];
 
             keywords.forEach(keyword => {
