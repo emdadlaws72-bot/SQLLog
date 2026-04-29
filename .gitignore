@@ -1,0 +1,6 @@
+node_modules/
+*.log
+sql_log_*.txt
+sql_monitor_*.txt
+.DS_Store
+.env
